@@ -43,7 +43,7 @@ setup_build_directory() {
     local pkg_dir="$BUILD_DIR/${PACKAGE_NAME}_${VERSION}_${ARCHITECTURE}"
     mkdir -p "$pkg_dir"/{DEBIAN,opt/animeverse/{app,data,logs},usr/share/{applications,icons/hicolor/{16x16,32x32,48x48,64x64,128x128,256x256}/apps,pixmaps}}
     
-    echo "$pkg_dir"
+    printf "%s" "$pkg_dir"
 }
 
 # Copy source files
