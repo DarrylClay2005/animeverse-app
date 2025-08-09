@@ -1,0 +1,29 @@
+#!/bin/bash
+# AnimeVerse Pre-Removal Script
+
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        # Stop any running AnimeVerse processes
+        if pgrep -f "python.*animeverse" > /dev/null; then
+            echo "Stopping AnimeVerse processes..."
+            pkill -f "python.*animeverse" || true
+        fi
+
+        # Remove symbolic link
+        if [ -L /usr/local/bin/animeverse ]; then
+            rm -f /usr/local/bin/animeverse
+        fi
+        ;;
+
+    failed-upgrade)
+        ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

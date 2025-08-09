@@ -1,0 +1,48 @@
+#!/bin/bash
+# AnimeVerse Post-Installation Script
+
+set -e
+
+case "$1" in
+    configure)
+        # Create application directories
+        mkdir -p /opt/animeverse/{app,data,logs}
+        mkdir -p /usr/share/applications
+        mkdir -p /usr/share/icons/hicolor/{16x16,32x32,48x48,64x64,128x128,256x256}/apps
+        mkdir -p /usr/share/pixmaps
+
+        # Set proper permissions
+        chmod -R 755 /opt/animeverse
+        chmod +x /opt/animeverse/animeverse-launcher.sh
+        chmod 644 /usr/share/applications/animeverse.desktop
+
+        # Update desktop database
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database /usr/share/applications
+        fi
+
+        # Update icon cache
+        if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+        fi
+
+        # Create symbolic link for launcher
+        ln -sf /opt/animeverse/animeverse-launcher.sh /usr/local/bin/animeverse
+
+        echo "✓ AnimeVerse installation completed successfully!"
+        echo "  Launch with: animeverse"
+        echo "  Or find it in your applications menu"
+        echo ""
+        echo "📺 Enjoy discovering amazing anime!"
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,50 @@
+# Build directory
+build/
+dist/
+*.deb
+
+# Logs
+logs/
+*.log
+
+# Node modules (if using any npm packages)
+node_modules/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Environment variables
+.env
+.env.local
+
+# Backup files
+*.backup
+*.bak
+
+# Test results
+test-results/
+coverage-reports/
+
+# Generated icons (if any)
+assets/generated/

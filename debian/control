@@ -1,0 +1,23 @@
+Package: animeverse
+Version: 2.0.0
+Section: web
+Priority: optional
+Architecture: all
+Depends: python3 (>= 3.8), python3-pip, xdg-utils
+Maintainer: AnimeVerse Team <contact@animeverse.app>
+Description: AnimeVerse - Anime Discovery Platform
+ AnimeVerse is a modern, feature-rich anime discovery and streaming platform
+ designed for anime enthusiasts. It provides:
+ .
+  * Advanced anime search and discovery
+  * Personal watchlist management
+  * Trending anime tracking
+  * Multi-platform streaming integration
+  * Beautiful, responsive dark theme interface
+  * Local caching for improved performance
+ .
+ Features include integration with popular streaming platforms like
+ Crunchyroll, Funimation, and alternative sources. The application
+ runs locally and provides a seamless anime discovery experience.
+Homepage: https://github.com/desmondrawls/animeverse-app
+Bugs: https://github.com/desmondrawls/animeverse-app/issues
