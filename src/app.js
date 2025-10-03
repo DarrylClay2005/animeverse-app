@@ -1,171 +1,729 @@
-// AnimeVerse v2.0.0 - Ultra-Optimized Production Version
+// AnimeVerse Enhanced v3.0.0 - Fixed and Fully Functional Version
 'use strict';
-!function(window,document){"undefined"!=typeof module&&module.exports;
 
-// Optimized state management
-const S={l:!1,a:[],w:JSON.parse(localStorage.getItem('animeverse_watchlist')||'[]'),e:{},c:new Map(),q:[]};
-const A={u:'https://api.jikan.moe/v4',r:3,t:3e5,o:1e4};
+// Global state management
+const AppState = {
+    loading: false,
+    animeData: [],
+    watchlist: JSON.parse(localStorage.getItem('animeverse_watchlist') || '[]'),
+    elements: {},
+    cache: new Map(),
+    rateQueue: [],
+    currentEpisode: null,
+    hlsPlayer: null,
+    isStreaming: false,
+    provider: 'gogoanime'
+};
 
-// DOM Ready & Initialize
-document.addEventListener('DOMContentLoaded',()=>{
-const ids=['hero-search','search-btn','loading-overlay','search-results','search-grid','featured-section','featured-grid','results-count','clear-search','toast-container','detail-modal','detail-content','close-detail'];
-ids.forEach(id=>S.e[id]=document.getElementById(id));
+// API configuration
+const ApiConfig = {
+    baseUrl: '/api',
+    consumetUrl: 'https://api.consumet.org',
+    rateLimit: 3,
+    timeout: 30000,
+    retries: 10000
+};
 
-// Navigation
-document.querySelectorAll('.nav-link').forEach(l=>l.addEventListener('click',e=>{e.preventDefault();switchSection(l.dataset.section)}));
+// Initialize application
+document.addEventListener('DOMContentLoaded', initializeApp);
 
-// Search with debouncing
-const debounce=(f,w)=>{let t;return(...a)=>{clearTimeout(t);t=setTimeout(()=>f.apply(this,a),w)}};
-S.e['hero-search']?.addEventListener('input',debounce(()=>{const q=S.e['hero-search']?.value?.trim();q&&q.length>=2&&performSearch()},500));
-S.e['hero-search']?.addEventListener('keypress',e=>e.key==='Enter'&&performSearch());
-S.e['search-btn']?.addEventListener('click',performSearch);
-S.e['clear-search']?.addEventListener('click',()=>{S.e['hero-search'].value='';S.e['search-results']?.classList.add('hidden');document.querySelector('.hero-section').style.display='block';S.e['search-grid']&&(S.e['search-grid'].innerHTML='')});
+function initializeApp() {
+    // Cache DOM elements
+    const elementIds = [
+        'hero-search', 'search-btn', 'loading-overlay', 'search-results', 
+        'search-grid', 'featured-section', 'featured-grid', 'results-count', 
+        'clear-search', 'toast-container', 'detail-modal', 'detail-content', 
+        'close-detail', 'player-modal', 'player-video'
+    ];
+    
+    elementIds.forEach(id => {
+        AppState.elements[id] = document.getElementById(id);
+    });
 
-// Modals
-S.e['close-detail']?.addEventListener('click',()=>document.getElementById('detail-modal')?.classList.add('hidden'));
-document.getElementById('refresh-featured')?.addEventListener('click',loadFeaturedAnime);
-
-// Click delegation
-document.addEventListener('click',e=>{const c=e.target.closest('.anime-card');c?.dataset.animeData&&showAnimeDetails(JSON.parse(c.dataset.animeData))});
-
-loadFeaturedAnime();
-showToast('AnimeVerse ready!','success');
-});
-
-function switchSection(s){
-document.querySelectorAll('.nav-link').forEach(l=>{l.classList.toggle('active',l.dataset.section===s);l.classList.toggle('text-anime-text',l.dataset.section===s);l.classList.toggle('text-anime-muted',l.dataset.section!==s)});
-document.querySelectorAll('.content-section').forEach(el=>el.classList.add('hidden'));
-const h=document.querySelector('.hero-section');h.style.display=s==='home'?'block':'none';
-const m={'home':()=>S.e['featured-section']?.classList.remove('hidden'),'trending':()=>showSection('trending-section',loadTrendingAnime),'watchlist':()=>showSection('watchlist-section',displayWatchlist),'search':()=>{S.e['search-results']?.classList.remove('hidden');S.e['hero-search']?.focus()}};
-m[s]?.();
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Load initial content
+    loadFeaturedAnime();
+    showToast('AnimeVerse Enhanced ready!', 'success');
 }
 
-function showSection(id,fn){const s=document.getElementById(id);if(s){s.classList.remove('hidden');fn?.()}}
+function setupEventListeners() {
+    // Navigation
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchSection(link.dataset.section);
+        });
+    });
 
-async function performSearch(){
-const q=S.e['hero-search']?.value?.trim();
-if(!q||q.length<2){showToast('Enter at least 2 characters','warning');return}
-try{showLoading('Searching...');const r=await searchAnime(q);displayResults(r,'search');showSearchSection();showToast(`Found ${r.length} results`,'success')}catch(e){showToast('Search failed','error')}finally{hideLoading()}
+    // Search functionality
+    const debounce = (func, wait) => {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    };
+
+    const searchInput = AppState.elements['hero-search'];
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce(() => {
+            const query = searchInput.value.trim();
+            if (query && query.length >= 2) {
+                performSearch();
+            }
+        }, 500));
+
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+    }
+
+    const searchBtn = AppState.elements['search-btn'];
+    if (searchBtn) {
+        searchBtn.addEventListener('click', performSearch);
+    }
+
+    const clearBtn = AppState.elements['clear-search'];
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearSearch);
+    }
+
+    // Modal handlers
+    const closeDetail = AppState.elements['close-detail'];
+    if (closeDetail) {
+        closeDetail.addEventListener('click', () => {
+            AppState.elements['detail-modal']?.classList.add('hidden');
+        });
+    }
+
+    // Refresh button
+    const refreshBtn = document.getElementById('refresh-featured');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', loadFeaturedAnime);
+    }
+
+    // Click delegation for anime cards
+    document.addEventListener('click', (e) => {
+        const card = e.target.closest('.anime-card');
+        if (card && card.dataset.animeData) {
+            try {
+                const animeData = JSON.parse(card.dataset.animeData);
+                showAnimeDetails(animeData);
+            } catch (err) {
+                console.error('Error parsing anime data:', err);
+            }
+        }
+    });
 }
 
-async function apiRequest(endpoint){
-const url=`${A.u}${endpoint}`,cached=S.c.get(url);
-if(cached&&Date.now()-cached.timestamp<A.t)return cached.data;
-await rateLimitDelay();
-try{
-const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),A.o);
-const resp=await fetch(url,{signal:ctrl.signal,headers:{'Accept':'application/json','User-Agent':'AnimeVerse/2.0'}});
-clearTimeout(timeout);
-if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
-const data=await resp.json();
-S.c.set(url,{data,timestamp:Date.now()});
-return data;
-}catch(e){if(e.name==='AbortError')throw new Error('Timeout');throw e}
+// Section switching
+function switchSection(section) {
+    // Update navigation
+    document.querySelectorAll('.nav-link').forEach(link => {
+        const isActive = link.dataset.section === section;
+        link.classList.toggle('active', isActive);
+        link.classList.toggle('text-anime-text', isActive);
+        link.classList.toggle('text-anime-muted', !isActive);
+    });
+
+    // Hide all sections
+    document.querySelectorAll('.content-section').forEach(el => {
+        el.classList.add('hidden');
+    });
+
+    // Show/hide hero section
+    const heroSection = document.querySelector('.hero-section');
+    if (heroSection) {
+        heroSection.style.display = section === 'home' ? 'block' : 'none';
+    }
+
+    // Show specific section
+    const sectionMap = {
+        'home': () => showSection('featured-section'),
+        'trending': () => showSection('trending-section', loadTrendingAnime),
+        'watchlist': () => showSection('watchlist-section', displayWatchlist),
+        'search': () => {
+            showSection('search-results');
+            AppState.elements['hero-search']?.focus();
+        }
+    };
+
+    const handler = sectionMap[section];
+    if (handler) {
+        handler();
+    }
 }
 
-async function rateLimitDelay(){
-const now=Date.now();
-S.q=S.q.filter(t=>now-t<1000);
-if(S.q.length>=A.r){const d=1000-(now-S.q[0]);await new Promise(r=>setTimeout(r,d))}
-S.q.push(now);
+function showSection(sectionId, callback) {
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.classList.remove('hidden');
+        if (callback) {
+            callback();
+        }
+    }
 }
 
-async function searchAnime(q){
-try{const d=await apiRequest(`/anime?q=${encodeURIComponent(q)}&limit=20&order_by=score&sort=desc`);return processAnimeData(d.data||[])}
-catch(e){return getFallbackData(q)}
+// API request functionality
+async function apiRequest(endpoint) {
+    const url = `${ApiConfig.baseUrl}${endpoint}`;
+    const cached = AppState.cache.get(url);
+    
+    if (cached && Date.now() - cached.timestamp < ApiConfig.timeout) {
+        return cached.data;
+    }
+
+    await rateLimitDelay();
+
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), ApiConfig.retries);
+
+        const response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'AnimeVerse/3.0'
+            }
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        AppState.cache.set(url, { data, timestamp: Date.now() });
+        return data;
+    } catch (e) {
+        if (e.name === 'AbortError') {
+            throw new Error('Request timeout');
+        }
+        throw e;
+    }
 }
 
-async function loadFeaturedAnime(){
-try{showLoading('Loading...');const d=await apiRequest('/top/anime?limit=20');displayResults(processAnimeData(d.data||[]),'featured')}
-catch(e){showToast('Failed to load','error')}finally{hideLoading()}
+async function rateLimitDelay() {
+    const now = Date.now();
+    AppState.rateQueue = AppState.rateQueue.filter(time => now - time < 1000);
+    
+    if (AppState.rateQueue.length >= ApiConfig.rateLimit) {
+        const delay = 1000 - (now - AppState.rateQueue[0]);
+        await new Promise(resolve => setTimeout(resolve, delay));
+    }
+    
+    AppState.rateQueue.push(now);
 }
 
-async function loadTrendingAnime(){
-try{showLoading('Loading...');const d=await apiRequest('/seasons/now?limit=20');displayResults(processAnimeData(d.data||[]),'trending')}
-catch(e){showToast('Failed to load','error')}finally{hideLoading()}
+// Search functionality
+async function performSearch() {
+    const searchInput = AppState.elements['hero-search'];
+    const query = searchInput?.value.trim();
+    
+    if (!query || query.length < 2) {
+        showToast('Enter at least 2 characters', 'warning');
+        return;
+    }
+
+    try {
+        showLoading('Searching anime...');
+        const results = await searchAnime(query);
+        displayResults(results, 'search');
+        showSearchSection();
+        showToast(`Found ${results.length} results`, 'success');
+    } catch (e) {
+        console.error('Search error:', e);
+        showToast('Search failed. Please try again.', 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
-function processAnimeData(arr){
-return arr.map(a=>({id:a.mal_id,title:a.title,englishTitle:a.title_english,type:a.type,episodes:a.episodes,year:a.aired?.from?new Date(a.aired.from).getFullYear():'Unknown',score:a.score||'N/A',synopsis:a.synopsis||'No synopsis available',genres:a.genres?.map(g=>g.name)||[],rating:a.rating,image:a.images?.jpg?.large_image_url||a.images?.jpg?.image_url||generatePlaceholderImage(a.title),url:a.url}))
+async function searchAnime(query) {
+    try {
+        const data = await apiRequest(`/search?q=${encodeURIComponent(query)}`);
+        const results = (data && data.results) || [];
+        return results.map(item => ({
+            id: item.id,
+            provider: item.provider || AppState.provider,
+            title: item.title,
+            englishTitle: item.english_title || item.title,
+            type: item.type || 'Anime',
+            episodes: item.episodes,
+            year: item.releaseDate || 'Unknown',
+            score: 'N/A',
+            synopsis: '',
+            genres: [],
+            rating: '',
+            image: item.image || generatePlaceholderImage(item.title),
+            url: item.url || '#'
+        }));
+    } catch (e) {
+        console.error('Search API error:', e);
+        return getFallbackData(query);
+    }
 }
 
-function getFallbackData(q){return[{id:Date.now(),title:`"${q}" - Demo Result`,englishTitle:'Demo Result',type:'TV',episodes:12,year:2024,score:8.5,synopsis:'Demo result when API unavailable',genres:['Demo'],rating:'PG-13',image:generatePlaceholderImage(q),url:'#'}]}
-
-function displayResults(results,type){
-const gid=`${type==='search'?'search':type==='trending'?'trending':'featured'}-grid`,g=document.getElementById(gid);
-if(!g)return;g.innerHTML='';S.a=results;
-const frag=document.createDocumentFragment();
-results.forEach((a,i)=>frag.appendChild(createAnimeCard(a,i)));
-g.appendChild(frag);
-if(type==='search'&&S.e['results-count'])S.e['results-count'].textContent=`${results.length} results`;
+function getFallbackData(query) {
+    return [{
+        id: Date.now().toString(),
+        provider: AppState.provider,
+        title: `"${query}" - Demo Result`,
+        englishTitle: 'Demo Result',
+        type: 'TV',
+        episodes: 12,
+        year: '2024',
+        score: '8.5',
+        synopsis: 'Demo result when API is unavailable',
+        genres: ['Demo'],
+        rating: 'PG-13',
+        image: generatePlaceholderImage(query),
+        url: '#'
+    }];
 }
 
-function createAnimeCard(a,i){
-const c=document.createElement('div');
-c.className='anime-card bg-anime-secondary rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer';
-c.dataset.animeData=JSON.stringify(a);c.style.animationDelay=`${i*50}ms`;
-const g=a.genres.slice(0,3).map(genre=>`<span class="inline-block bg-anime-accent/20 text-anime-accent text-xs px-2 py-1 rounded-full">${genre}</span>`).join('');
-c.innerHTML=`<div class="relative"><img src="${a.image}" alt="${a.title}" class="w-full h-64 object-cover" loading="lazy"><div class="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded-full text-xs">${a.year}</div></div><div class="p-4"><h3 class="font-bold text-anime-text mb-2 line-clamp-2 min-h-[3rem]">${a.title}</h3><div class="flex items-center justify-between mb-2"><span class="text-anime-muted text-sm">${a.type}</span>${a.score!=='N/A'?`<div class="flex items-center text-amber-400"><i class="fas fa-star mr-1"></i><span class="text-sm">${a.score}</span></div>`:''}</div><p class="text-anime-muted text-sm mb-3 line-clamp-3">${a.synopsis.substring(0,120)}...</p><div class="flex flex-wrap gap-1">${g}</div></div>`;
-return c;
+function clearSearch() {
+    const searchInput = AppState.elements['hero-search'];
+    if (searchInput) {
+        searchInput.value = '';
+    }
+
+    const searchResults = AppState.elements['search-results'];
+    if (searchResults) {
+        searchResults.classList.add('hidden');
+    }
+
+    const heroSection = document.querySelector('.hero-section');
+    if (heroSection) {
+        heroSection.style.display = 'block';
+    }
+
+    const searchGrid = AppState.elements['search-grid'];
+    if (searchGrid) {
+        searchGrid.innerHTML = '';
+    }
 }
 
-function displayWatchlist(){
-const g=document.getElementById('watchlist-grid'),e=document.getElementById('watchlist-empty');
-if(!g||!e)return;
-if(S.w.length===0){e.classList.remove('hidden');g.classList.add('hidden')}else{e.classList.add('hidden');g.classList.remove('hidden');displayResults(S.w,'watchlist')}
+function showSearchSection() {
+    const searchResults = AppState.elements['search-results'];
+    if (searchResults) {
+        searchResults.classList.remove('hidden');
+    }
+
+    const heroSection = document.querySelector('.hero-section');
+    if (heroSection) {
+        heroSection.style.display = 'none';
+    }
 }
 
-function showAnimeDetails(a){
-const g=a.genres.map(genre=>`<span class="inline-block bg-anime-accent/20 text-anime-accent px-3 py-1 rounded-full text-sm">${genre}</span>`).join('');
-const content=`<div class="flex flex-col lg:flex-row gap-6"><img src="${a.image}" alt="${a.title}" class="w-full lg:w-80 h-auto object-cover rounded-lg"><div class="flex-1"><h2 class="text-3xl font-bold text-anime-text mb-4">${a.title}</h2><div class="grid grid-cols-2 gap-4 mb-4"><div><span class="text-anime-muted">Type:</span><span class="text-anime-text ml-2">${a.type}</span></div><div><span class="text-anime-muted">Year:</span><span class="text-anime-text ml-2">${a.year}</span></div><div><span class="text-anime-muted">Episodes:</span><span class="text-anime-text ml-2">${a.episodes||'Unknown'}</span></div>${a.score!=='N/A'?`<div><span class="text-anime-muted">Score:</span><span class="text-amber-400 ml-2"><i class="fas fa-star mr-1"></i>${a.score}</span></div>`:''}</div><div class="mb-4"><h3 class="text-anime-text font-semibold mb-2">Genres:</h3><div class="flex flex-wrap gap-2">${g}</div></div><div class="flex gap-3 mb-4"><button class="bg-anime-accent hover:bg-anime-accent-hover text-white px-6 py-3 rounded-lg transition-colors flex items-center" onclick="showStreamingOptions('${a.title}',1)"><i class="fas fa-play mr-2"></i>Watch Now</button><button class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors flex items-center" onclick="toggleWatchlist(${JSON.stringify(a).replace(/"/g,'&quot;')})"><i class="fas fa-bookmark mr-2"></i>${S.w.some(w=>w.id===a.id)?'Remove':'Add to Watchlist'}</button></div></div></div><div class="mt-6"><h3 class="text-anime-text font-semibold mb-3">Synopsis</h3><p class="text-anime-muted leading-relaxed">${a.synopsis}</p></div><div class="mt-6 text-center"><a href="${a.url}" target="_blank" class="inline-flex items-center text-anime-accent hover:text-anime-accent-hover"><i class="fas fa-external-link-alt mr-2"></i>View on MyAnimeList</a></div>`;
-S.e['detail-content'].innerHTML=content;
-document.getElementById('detail-modal')?.classList.remove('hidden');
+// Featured and trending anime
+async function loadFeaturedAnime() {
+    try {
+        showLoading('Loading featured anime...');
+        const data = await apiRequest('/trending');
+        const results = processApiData(data.results || []);
+        displayResults(results, 'featured');
+    } catch (e) {
+        console.error('Featured anime error:', e);
+        showToast('Failed to load featured anime', 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
-function showStreamingOptions(title,ep=1){
-const p=[{name:'Crunchyroll',url:`https://crunchyroll.com/search?q=${encodeURIComponent(title)}`,icon:'fab fa-chrome',official:true},{name:'Funimation',url:`https://funimation.com/search?q=${encodeURIComponent(title)}`,icon:'fas fa-tv',official:true},{name:'GogoAnime',url:`https://gogoanime.pe/search.html?keyword=${encodeURIComponent(title)}`,icon:'fas fa-play',official:false},{name:'AnimixPlay',url:`https://animixplay.to/?q=${encodeURIComponent(title)}`,icon:'fas fa-film',official:false}];
-const op=p.filter(p=>p.official).map(p=>`<button class="flex items-center justify-center gap-3 w-full p-4 bg-green-600/20 border border-green-500 text-green-400 hover:bg-green-600/30 rounded-lg transition-colors" onclick="openPlatform('${p.url}')"><i class="${p.icon}"></i>${p.name}</button>`).join('');
-const ap=p.filter(p=>!p.official).map(p=>`<button class="flex items-center justify-center gap-3 w-full p-4 bg-blue-600/20 border border-blue-500 text-blue-400 hover:bg-blue-600/30 rounded-lg transition-colors" onclick="openPlatform('${p.url}')"><i class="${p.icon}"></i>${p.name}</button>`).join('');
-showCustomModal('Watch '+title,`<div class="space-y-6"><div><h4 class="text-anime-text font-semibold mb-3 flex items-center"><i class="fas fa-star text-amber-400 mr-2"></i>Official Platforms</h4><div class="grid gap-3">${op}</div></div><div><h4 class="text-anime-text font-semibold mb-3 flex items-center"><i class="fas fa-globe text-blue-400 mr-2"></i>Alternative Sources</h4><div class="grid gap-3">${ap}</div></div><div class="text-center text-sm text-anime-muted bg-anime-primary/50 p-3 rounded-lg"><i class="fas fa-info-circle mr-2"></i>Links will open platform search pages. Availability may vary by region.</div></div>`);
+async function loadTrendingAnime() {
+    try {
+        showLoading('Loading trending anime...');
+        const data = await apiRequest('/trending');
+        const results = processApiData(data.results || []);
+        displayResults(results, 'trending');
+    } catch (e) {
+        console.error('Trending anime error:', e);
+        showToast('Failed to load trending anime', 'error');
+    } finally {
+        hideLoading();
+    }
 }
 
-function openPlatform(url){window.open(url,'_blank');closeCustomModal();showToast('Opening platform...','info')}
-
-function toggleWatchlist(a){
-const i=S.w.findIndex(w=>w.id===a.id);
-if(i>-1){S.w.splice(i,1);showToast('Removed from watchlist','success')}else{S.w.push(a);showToast('Added to watchlist','success')}
-localStorage.setItem('animeverse_watchlist',JSON.stringify(S.w));
-showAnimeDetails(a);
+function processApiData(arr) {
+    return arr.map(item => ({
+        id: item.id,
+        provider: item.provider || AppState.provider,
+        title: item.title,
+        englishTitle: item.english_title || item.title,
+        type: item.type || 'Anime',
+        episodes: item.episodes,
+        year: item.releaseDate || 'Unknown',
+        score: 'N/A',
+        synopsis: '',
+        genres: [],
+        rating: '',
+        image: item.image || generatePlaceholderImage(item.title),
+        url: item.url || '#'
+    }));
 }
 
-function showCustomModal(title,content){
-const m=document.createElement('div');
-m.className='fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50';
-m.innerHTML=`<div class="bg-anime-secondary rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"><div class="p-6"><div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-anime-text">${title}</h3><button onclick="closeCustomModal()" class="text-anime-muted hover:text-anime-text p-2"><i class="fas fa-times text-xl"></i></button></div>${content}</div></div>`;
-m.id='custom-modal';
-document.body.appendChild(m);
+// Display functions
+function displayResults(results, type) {
+    const gridId = `${type === 'search' ? 'search' : type === 'trending' ? 'trending' : 'featured'}-grid`;
+    const grid = document.getElementById(gridId);
+    
+    if (!grid) return;
+    
+    grid.innerHTML = '';
+    AppState.animeData = results;
+
+    const fragment = document.createDocumentFragment();
+    results.forEach((anime, index) => {
+        fragment.appendChild(createAnimeCard(anime, index));
+    });
+    
+    grid.appendChild(fragment);
+
+    // Update results count for search
+    if (type === 'search' && AppState.elements['results-count']) {
+        AppState.elements['results-count'].textContent = `${results.length} results`;
+    }
 }
 
-function closeCustomModal(){document.getElementById('custom-modal')?.remove()}
+function createAnimeCard(anime, index) {
+    const card = document.createElement('div');
+    card.className = 'anime-card bg-anime-secondary rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer';
+    card.dataset.animeData = JSON.stringify(anime);
+    card.style.animationDelay = `${index * 50}ms`;
 
-function showSearchSection(){S.e['search-results']?.classList.remove('hidden');document.querySelector('.hero-section').style.display='none'}
+    const genres = (anime.genres || []).slice(0, 3).map(genre => 
+        `<span class="inline-block bg-anime-accent/20 text-anime-accent text-xs px-2 py-1 rounded-full">${genre}</span>`
+    ).join('');
 
-function showLoading(msg='Loading...'){if(S.l)return;S.l=true;const o=S.e['loading-overlay'];if(o){o.classList.remove('hidden');const t=o.querySelector('.loading-text');if(t)t.textContent=msg}}
+    const scoreElement = anime.score !== 'N/A' ? 
+        `<div class="flex items-center text-amber-400">
+            <i class="fas fa-star mr-1"></i>
+            <span class="text-sm">${anime.score}</span>
+        </div>` : '';
 
-function hideLoading(){S.l=false;S.e['loading-overlay']?.classList.add('hidden')}
+    card.innerHTML = `
+        <div class="relative">
+            <img src="${anime.image}" alt="${anime.title}" class="w-full h-64 object-cover" loading="lazy">
+            <div class="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded-full text-xs">${anime.year}</div>
+        </div>
+        <div class="p-4">
+            <h3 class="font-bold text-anime-text mb-2 line-clamp-2 min-h-[3rem]">${anime.title}</h3>
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-anime-muted text-sm">${anime.type}</span>
+                ${scoreElement}
+            </div>
+            <p class="text-anime-muted text-sm mb-3 line-clamp-3">${(anime.synopsis || 'No synopsis available').substring(0, 120)}...</p>
+            <div class="flex flex-wrap gap-1">${genres}</div>
+        </div>
+    `;
 
-function generatePlaceholderImage(title){const colors=['ff6b6b','4ecdc4','45b7d1','96ceb4','ffeaa7','fd79a8','fdcb6e'];const hash=title.split('').reduce((a,b)=>((a<<5)-a)+b.charCodeAt(0),0);const color=colors[Math.abs(hash)%colors.length];return `https://via.placeholder.com/400x600/${color}/ffffff?text=${encodeURIComponent(title.substring(0,20))}`}
-
-function showToast(msg,type='info'){
-const cont=S.e['toast-container'];if(!cont)return;
-const icons={success:'fa-check-circle text-green-400',error:'fa-exclamation-circle text-red-400',warning:'fa-exclamation-triangle text-yellow-400',info:'fa-info-circle text-blue-400'};
-const colors={success:'bg-green-900/80 border-green-500',error:'bg-red-900/80 border-red-500',warning:'bg-yellow-900/80 border-yellow-500',info:'bg-blue-900/80 border-blue-500'};
-const t=document.createElement('div');
-t.className=`toast ${colors[type]} backdrop-blur-sm border rounded-lg px-4 py-3 shadow-lg flex items-center gap-3 transform translate-x-full transition-all duration-300`;
-t.innerHTML=`<i class="fas ${icons[type]}"></i><span class="text-white font-medium">${msg}</span><button onclick="this.parentElement.remove()" class="text-white/70 hover:text-white ml-2"><i class="fas fa-times"></i></button>`;
-cont.appendChild(t);
-setTimeout(()=>t.classList.remove('translate-x-full'),100);
-setTimeout(()=>{t.classList.add('translate-x-full','opacity-0');setTimeout(()=>t.remove(),300)},4000);
+    return card;
 }
 
-}(window,document);
+// Anime details functionality
+async function showAnimeDetails(anime) {
+    try {
+        showLoading('Loading anime details...');
+        
+        // Fetch detailed info if missing
+        let info = anime;
+        if (!anime.episodes || !anime.synopsis || !anime.genres || anime.genres.length === 0) {
+            const provider = anime.provider || AppState.provider;
+            const id = anime.id;
+            const detailData = await apiRequest(`/anime/${provider}/${encodeURIComponent(id)}`);
+            
+            if (detailData) {
+                info = {
+                    ...anime,
+                    title: detailData.title || anime.title,
+                    englishTitle: detailData.english_title || anime.englishTitle,
+                    synopsis: detailData.synopsis || 'No synopsis available',
+                    genres: detailData.genres || [],
+                    episodes: detailData.totalEpisodes || detailData.episodes || anime.episodes,
+                    image: detailData.image || anime.image,
+                    provider: provider,
+                    episodes_list: detailData.episodes_list || []
+                };
+            }
+        }
+
+        const genresHtml = (info.genres || []).map(genre => 
+            `<span class="inline-block bg-anime-accent/20 text-anime-accent px-3 py-1 rounded-full text-sm">${genre}</span>`
+        ).join('');
+
+        const episodeButtons = (info.episodes_list || []).slice(0, 50).map(ep => 
+            `<button class="episode-button px-3 py-2 rounded bg-anime-secondary hover:bg-gray-700 border border-gray-700 text-sm transition-all" 
+                     onclick="playEpisode('${info.provider || AppState.provider}','${ep.id || ep.episodeId || ep.url || ''}','${ep.number || 1}')">
+                EP ${ep.number || 1}
+             </button>`
+        ).join(' ');
+
+        const isInWatchlist = AppState.watchlist.some(w => w.id === anime.id);
+
+        const content = `
+            <div class="flex flex-col lg:flex-row gap-6">
+                <img src="${info.image}" alt="${info.title}" class="w-full lg:w-80 h-auto object-cover rounded-lg">
+                <div class="flex-1">
+                    <h2 class="text-3xl font-bold text-anime-text mb-4">${info.title}</h2>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div><span class="text-anime-muted">Type:</span><span class="text-anime-text ml-2">${info.type || 'Anime'}</span></div>
+                        <div><span class="text-anime-muted">Year:</span><span class="text-anime-text ml-2">${info.year || 'Unknown'}</span></div>
+                        <div><span class="text-anime-muted">Episodes:</span><span class="text-anime-text ml-2">${info.episodes || 'Unknown'}</span></div>
+                    </div>
+                    <div class="mb-4">
+                        <h3 class="text-anime-text font-semibold mb-2">Genres:</h3>
+                        <div class="flex flex-wrap gap-2">${genresHtml}</div>
+                    </div>
+                    <div class="flex gap-3 mb-4">
+                        <button class="bg-anime-accent hover:bg-anime-accent-hover text-white px-6 py-3 rounded-lg transition-colors flex items-center" 
+                                onclick="scrollToEpisodes()">
+                            <i class="fas fa-play mr-2"></i>Watch
+                        </button>
+                        <button class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-3 rounded-lg transition-colors flex items-center" 
+                                onclick="toggleWatchlist(${JSON.stringify(anime).replace(/"/g, '&quot;')})">
+                            <i class="fas fa-bookmark mr-2"></i>${isInWatchlist ? 'Remove from' : 'Add to'} Watchlist
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6">
+                <h3 class="text-anime-text font-semibold mb-3">Synopsis</h3>
+                <p class="text-anime-muted leading-relaxed">${info.synopsis || 'No synopsis available'}</p>
+            </div>
+            <div id="episode-list" class="mt-6">
+                <h3 class="text-anime-text font-semibold mb-3">Episodes</h3>
+                <div class="flex flex-wrap gap-2">
+                    ${episodeButtons || '<span class="text-anime-muted">No episodes available</span>'}
+                </div>
+            </div>
+        `;
+
+        AppState.elements['detail-content'].innerHTML = content;
+        AppState.elements['detail-modal']?.classList.remove('hidden');
+    } catch (e) {
+        console.error('Anime details error:', e);
+        showToast('Failed to load anime details', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function scrollToEpisodes() {
+    const episodeList = document.getElementById('episode-list');
+    if (episodeList) {
+        episodeList.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+// Video player functionality
+async function playEpisode(provider, episodeId, epNum) {
+    try {
+        showLoading(`Loading episode ${epNum}...`);
+        
+        const data = await apiRequest(`/watch/${provider}/${encodeURIComponent(episodeId)}`);
+        const sources = (data && data.sources) || [];
+        
+        if (!sources.length) {
+            showToast('No streaming sources found', 'error');
+            return;
+        }
+
+        // Find best source (prefer HLS)
+        const hlsSource = sources.find(s => s.isM3U8) || 
+                         sources.find(s => /m3u8/i.test(s.quality || '')) ||
+                         sources[0];
+
+        const video = AppState.elements['player-video'];
+        const modal = AppState.elements['player-modal'];
+        
+        if (!video || !modal) {
+            showToast('Video player not available', 'error');
+            return;
+        }
+
+        // Reset video
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+
+        // Setup HLS if supported
+        if (window.Hls && window.Hls.isSupported() && hlsSource && hlsSource.url && /m3u8/.test(hlsSource.url)) {
+            if (AppState.hlsPlayer) {
+                AppState.hlsPlayer.destroy();
+                AppState.hlsPlayer = null;
+            }
+            
+            AppState.hlsPlayer = new Hls();
+            AppState.hlsPlayer.loadSource(hlsSource.url);
+            AppState.hlsPlayer.attachMedia(video);
+            AppState.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+                video.play().catch(console.error);
+            });
+        } else {
+            // Fallback to native video
+            video.src = hlsSource.url;
+            video.play().catch(console.error);
+        }
+
+        modal.classList.remove('hidden');
+        AppState.isStreaming = true;
+        AppState.currentEpisode = episodeId;
+        
+        showToast(`Playing Episode ${epNum}`, 'success');
+    } catch (e) {
+        console.error('Streaming error:', e);
+        showToast('Failed to load episode. Please try again.', 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+function closePlayer() {
+    const modal = AppState.elements['player-modal'];
+    const video = AppState.elements['player-video'];
+    
+    if (AppState.hlsPlayer) {
+        try {
+            AppState.hlsPlayer.destroy();
+        } catch (e) {
+            console.error('Error destroying HLS player:', e);
+        }
+        AppState.hlsPlayer = null;
+    }
+    
+    if (video) {
+        try {
+            video.pause();
+        } catch (e) {
+            console.error('Error pausing video:', e);
+        }
+    }
+    
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    
+    AppState.isStreaming = false;
+}
+
+// Watchlist functionality
+function displayWatchlist() {
+    const grid = document.getElementById('watchlist-grid');
+    const empty = document.getElementById('watchlist-empty');
+    
+    if (!grid || !empty) return;
+    
+    if (AppState.watchlist.length === 0) {
+        empty.classList.remove('hidden');
+        grid.classList.add('hidden');
+    } else {
+        empty.classList.add('hidden');
+        grid.classList.remove('hidden');
+        displayResults(AppState.watchlist, 'watchlist');
+    }
+}
+
+function toggleWatchlist(anime) {
+    const index = AppState.watchlist.findIndex(w => w.id === anime.id);
+    
+    if (index > -1) {
+        AppState.watchlist.splice(index, 1);
+        showToast('Removed from watchlist', 'success');
+    } else {
+        AppState.watchlist.push(anime);
+        showToast('Added to watchlist', 'success');
+    }
+    
+    localStorage.setItem('animeverse_watchlist', JSON.stringify(AppState.watchlist));
+    showAnimeDetails(anime); // Refresh the modal
+}
+
+// Utility functions
+function showLoading(message = 'Loading...') {
+    if (AppState.loading) return;
+    
+    AppState.loading = true;
+    const overlay = AppState.elements['loading-overlay'];
+    
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        const text = overlay.querySelector('.loading-text');
+        if (text) {
+            text.textContent = message;
+        }
+    }
+}
+
+function hideLoading() {
+    AppState.loading = false;
+    const overlay = AppState.elements['loading-overlay'];
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+
+function generatePlaceholderImage(title) {
+    const colors = ['ff6b6b', '4ecdc4', '45b7d1', '96ceb4', 'ffeaa7', 'fd79a8', 'fdcb6e'];
+    const hash = title.split('').reduce((a, b) => {
+        a = ((a << 5) - a) + b.charCodeAt(0);
+        return a & a;
+    }, 0);
+    const color = colors[Math.abs(hash) % colors.length];
+    return `https://via.placeholder.com/400x600/${color}/ffffff?text=${encodeURIComponent(title.substring(0, 20))}`;
+}
+
+function showToast(message, type = 'info') {
+    const container = AppState.elements['toast-container'];
+    if (!container) return;
+
+    const icons = {
+        success: 'fa-check-circle text-green-400',
+        error: 'fa-exclamation-circle text-red-400',
+        warning: 'fa-exclamation-triangle text-yellow-400',
+        info: 'fa-info-circle text-blue-400'
+    };
+
+    const colors = {
+        success: 'bg-green-900/80 border-green-500',
+        error: 'bg-red-900/80 border-red-500',
+        warning: 'bg-yellow-900/80 border-yellow-500',
+        info: 'bg-blue-900/80 border-blue-500'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${colors[type]} backdrop-blur-sm border rounded-lg px-4 py-3 shadow-lg flex items-center gap-3 transform translate-x-full transition-all duration-300`;
+    toast.innerHTML = `
+        <i class="fas ${icons[type]}"></i>
+        <span class="text-white font-medium">${message}</span>
+        <button onclick="this.parentElement.remove()" class="text-white/70 hover:text-white ml-2">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+
+    container.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => toast.classList.remove('translate-x-full'), 100);
+    
+    // Auto remove
+    setTimeout(() => {
+        toast.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
+}
+
+// Global functions for onclick handlers
+window.playEpisode = playEpisode;
+window.closePlayer = closePlayer;
+window.toggleWatchlist = toggleWatchlist;
+window.scrollToEpisodes = scrollToEpisodes;

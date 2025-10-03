@@ -8,7 +8,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 readonly BUILD_DIR="$PROJECT_ROOT/build"
 readonly PACKAGE_NAME="animeverse"
-readonly VERSION="2.0.0"
+readonly VERSION="3.0.0"
 readonly ARCHITECTURE="all"
 
 # Colors
@@ -52,17 +52,25 @@ copy_source_files() {
     
     log "Copying source files..."
     
-    # Copy application files
-    cp "$PROJECT_ROOT/src"/* "$pkg_dir/opt/animeverse/app/"
-    
-    # Copy launcher script
-    cp "$PROJECT_ROOT/scripts/animeverse-launcher.sh" "$pkg_dir/opt/animeverse/"
-    chmod +x "$pkg_dir/opt/animeverse/animeverse-launcher.sh"
-    
+    # Copy application files (frontend)
+    cp -r "$PROJECT_ROOT/src"/* "$pkg_dir/opt/animeverse/app/"
+
+    # Copy backend
+    mkdir -p "$pkg_dir/opt/animeverse/backend"
+    cp -r "$PROJECT_ROOT/backend"/* "$pkg_dir/opt/animeverse/backend/"
+
+    # Copy launcher scripts
+    cp "$PROJECT_ROOT/launch.sh" "$pkg_dir/opt/animeverse/"
+    chmod +x "$pkg_dir/opt/animeverse/launch.sh"
+    # Keep legacy launcher for compatibility
+    cp "$PROJECT_ROOT/scripts/animeverse-launcher.sh" "$pkg_dir/opt/animeverse/" || true
+    chmod +x "$pkg_dir/opt/animeverse/animeverse-launcher.sh" || true
+
     # Copy desktop entry
     cp "$PROJECT_ROOT/assets/animeverse.desktop" "$pkg_dir/usr/share/applications/"
-    
+
     # Copy manifest
+    mkdir -p "$pkg_dir/opt/animeverse/app/assets"
     cp "$PROJECT_ROOT/assets/site.webmanifest" "$pkg_dir/opt/animeverse/app/assets/"
 }
 
