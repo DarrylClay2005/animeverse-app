@@ -20,7 +20,7 @@ readonly NC='\033[0m'
 
 # Logging
 log() {
-    echo -e "${GREEN}[BUILD]${NC} $1"
+    echo -e "${GREEN}[BUILD]${NC} $1" >&2
 }
 
 warn() {
@@ -59,12 +59,9 @@ copy_source_files() {
     mkdir -p "$pkg_dir/opt/animeverse/backend"
     cp -r "$PROJECT_ROOT/backend"/* "$pkg_dir/opt/animeverse/backend/"
 
-    # Copy launcher scripts
+    # Copy launcher script
     cp "$PROJECT_ROOT/launch.sh" "$pkg_dir/opt/animeverse/"
     chmod +x "$pkg_dir/opt/animeverse/launch.sh"
-    # Keep legacy launcher for compatibility
-    cp "$PROJECT_ROOT/scripts/animeverse-launcher.sh" "$pkg_dir/opt/animeverse/" || true
-    chmod +x "$pkg_dir/opt/animeverse/animeverse-launcher.sh" || true
 
     # Copy desktop entry
     cp "$PROJECT_ROOT/assets/animeverse.desktop" "$pkg_dir/usr/share/applications/"
@@ -184,12 +181,12 @@ build_package() {
         # Show package info
         echo
         log "Package Information:"
-        dpkg-deb --info "$deb_file" | head -20
+        dpkg-deb --info "$deb_file" | head -20 || true
         
         # Show package contents
         echo
         log "Package Contents:"
-        dpkg-deb --contents "$deb_file" | head -20
+        dpkg-deb --contents "$deb_file" | head -20 || true
         if [[ $(dpkg-deb --contents "$deb_file" | wc -l) -gt 20 ]]; then
             echo "... and $(( $(dpkg-deb --contents "$deb_file" | wc -l) - 20 )) more files"
         fi

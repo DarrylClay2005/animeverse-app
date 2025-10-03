@@ -66,30 +66,19 @@ check_dependencies() {
     log "INFO" "Dependencies check passed"
 }
 
-# Install Python requirements
-install_requirements() {
-    log "INFO" "Installing Python requirements..."
-    
-    if [[ ! -f "$REQUIREMENTS_FILE" ]]; then
-        error_exit "Requirements file not found: $REQUIREMENTS_FILE"
-    fi
-    
-    # Create virtual environment if it doesn't exist
-    if [[ ! -d "$BACKEND_DIR/venv" ]]; then
-        log "INFO" "Creating virtual environment..."
-        python3 -m venv "$BACKEND_DIR/venv"
-    fi
-    
-    # Activate virtual environment
-    source "$BACKEND_DIR/venv/bin/activate" || error_exit "Failed to activate virtual environment"
-    
-    # Upgrade pip
-    python -m pip install --upgrade pip
-    
-    # Install requirements
-    python -m pip install flask requests || error_exit "Failed to install requirements"
-    
-    log "INFO" "Requirements installed successfully"
+# Verify required Python modules are available
+verify_python_modules() {
+    python3 - <<'PY'
+try:
+    import flask, requests
+except Exception as e:
+    import sys
+    print("[ERROR] Missing Python modules. Please install system packages:", file=sys.stderr)
+    print("        Debian/Ubuntu: sudo apt install -y python3-flask python3-requests", file=sys.stderr)
+    print("        Fedora/Nobara: sudo dnf install -y python3-flask python3-requests", file=sys.stderr)
+    sys.exit(1)
+print("OK")
+PY
 }
 
 # Find available port
@@ -118,9 +107,6 @@ start_app() {
     log "INFO" "Port: $port"
     log "INFO" "Debug mode: $debug"
     
-    # Activate virtual environment
-    source "$BACKEND_DIR/venv/bin/activate" || error_exit "Failed to activate virtual environment"
-    
     # Change to backend directory
     cd "$BACKEND_DIR" || error_exit "Failed to change to backend directory"
     
@@ -135,7 +121,7 @@ start_app() {
     fi
     
     log "INFO" "Starting Flask server..."
-    python app.py --host "$host" --port "$port" $debug_flag &
+    python3 app.py --host "$host" --port "$port" $debug_flag &
     local server_pid=$!
     
     # Wait a moment for server to start
@@ -183,7 +169,7 @@ setup() {
     log "INFO" "Setting up $APP_NAME..."
     
     check_dependencies
-    install_requirements
+    verify_python_modules
     
     log "INFO" "Setup completed successfully!"
 }
@@ -191,12 +177,6 @@ setup() {
 # Clean function
 clean() {
     log "INFO" "Cleaning up..."
-    
-    # Remove virtual environment
-    if [[ -d "$BACKEND_DIR/venv" ]]; then
-        rm -rf "$BACKEND_DIR/venv"
-        log "INFO" "Removed virtual environment"
-    fi
     
     # Remove cache files
     find "$SCRIPT_DIR" -name "*.pyc" -delete 2>/dev/null || true
@@ -232,7 +212,7 @@ Examples:
     $0 start                    # Same as above
     $0 start --debug            # Start in debug mode
     $0 start --host 0.0.0.0     # Start and bind to all interfaces
-    $0 setup                    # Setup environment
+    $0 setup                    # Verify dependencies
     $0 clean                    # Clean up
 
 EOF

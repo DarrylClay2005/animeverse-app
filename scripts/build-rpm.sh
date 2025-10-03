@@ -14,8 +14,9 @@ BUILDROOT="$HOME/rpmbuild"
 
 # Ensure rpmbuild tree exists
 if [[ ! -d "$BUILDROOT" ]]; then
-  mkdir -p "$BUILDROOT"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+  mkdir -p "$BUILDROOT"
 fi
+mkdir -p "$BUILDROOT/BUILD" "$BUILDROOT/RPMS" "$BUILDROOT/SOURCES" "$BUILDROOT/SPECS" "$BUILDROOT/SRPMS"
 
 # Create source tarball
 TARBALL_NAME="${NAME}-${VERSION}.tar.gz"

@@ -12,8 +12,8 @@ case "$1" in
         fi
 
         # Remove symbolic link
-        if [ -L /usr/local/bin/animeverse ]; then
-            rm -f /usr/local/bin/animeverse
+        if [ -L /usr/bin/animeverse ]; then
+            rm -f /usr/bin/animeverse
         fi
         ;;
 

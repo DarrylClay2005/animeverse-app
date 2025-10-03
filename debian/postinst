@@ -27,7 +27,7 @@ case "$1" in
         fi
 
         # Create symbolic link for launcher
-        ln -sf /opt/animeverse/animeverse-launcher.sh /usr/local/bin/animeverse
+        ln -sf /opt/animeverse/launch.sh /usr/bin/animeverse
 
         echo "✓ AnimeVerse installation completed successfully!"
         echo "  Launch with: animeverse"

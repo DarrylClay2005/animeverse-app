@@ -4,23 +4,11 @@ Type=Application
 Name=AnimeVerse
 GenericName=Anime Discovery Platform
 Comment=Discover, track, and stream your favorite anime
-Exec=/opt/animeverse/animeverse-launcher.sh
+Exec=/usr/bin/animeverse
 Icon=animeverse
 Terminal=false
 StartupNotify=true
 Categories=Network;AudioVideo;Video;Player;TV;
 Keywords=anime;streaming;discovery;watchlist;manga;otaku;
 MimeType=text/html;
-Actions=stop;status;logs;
-
-[Desktop Action stop]
-Name=Stop AnimeVerse
-Exec=/opt/animeverse/animeverse-launcher.sh stop
-
-[Desktop Action status]
-Name=Check Status
-Exec=/opt/animeverse/animeverse-launcher.sh status
-
-[Desktop Action logs]
-Name=View Logs
-Exec=/opt/animeverse/animeverse-launcher.sh logs
+# No extra actions to ensure simplest OOTB launch
