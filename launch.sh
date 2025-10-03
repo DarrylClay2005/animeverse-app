@@ -110,18 +110,29 @@ start_app() {
     # Change to backend directory
     cd "$BACKEND_DIR" || error_exit "Failed to change to backend directory"
     
-    # Set environment variables
-    export FLASK_APP="app.py"
-    export FLASK_ENV="${debug:+development}"
-    
-    # Start the Flask app
+    # Prefer bundled binary if available
+    local BIN_LOCAL="$SCRIPT_DIR/bin/animeverse"
+    local BIN_SYSTEM="/opt/animeverse/bin/animeverse"
+
     local debug_flag=""
     if [[ "$debug" == "true" ]]; then
         debug_flag="--debug"
     fi
-    
-    log "INFO" "Starting Flask server..."
-    python3 app.py --host "$host" --port "$port" $debug_flag &
+
+    if [[ -x "$BIN_LOCAL" ]]; then
+        log "INFO" "Starting bundled binary (local)..."
+        "$BIN_LOCAL" --host "$host" --port "$port" $debug_flag &
+    elif [[ -x "$BIN_SYSTEM" ]]; then
+        log "INFO" "Starting bundled binary (system)..."
+        "$BIN_SYSTEM" --host "$host" --port "$port" $debug_flag &
+    else
+        # Fallback to Flask app for development
+        # Set environment variables
+        export FLASK_APP="app.py"
+        export FLASK_ENV="${debug:+development}"
+        log "INFO" "Starting Flask server (fallback)..."
+        python3 app.py --host "$host" --port "$port" $debug_flag &
+    fi
     local server_pid=$!
     
     # Wait a moment for server to start
@@ -169,7 +180,10 @@ setup() {
     log "INFO" "Setting up $APP_NAME..."
     
     check_dependencies
-    verify_python_modules
+    # Only verify python modules when no binary is present
+    if [[ ! -x "$SCRIPT_DIR/bin/animeverse" && ! -x "/opt/animeverse/bin/animeverse" ]]; then
+        verify_python_modules
+    fi
     
     log "INFO" "Setup completed successfully!"
 }

@@ -34,14 +34,14 @@ echo "Creating SPEC file..."
 SPEC_FILE="$BUILDROOT/SPECS/${NAME}.spec"
 cat > "$SPEC_FILE" <<'SPEC'
 Name:           animeverse
-Version:        3.0.0
+Version:        3.1.0
 Release:        1%{?dist}
 Summary:        AnimeVerse Enhanced - Anime Streaming & Discovery
 License:        MIT
 URL:            https://github.com/DarrylClay2005/animeverse-app
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
-Requires:       python3, python3-flask, python3-requests
+# No runtime Python dependencies (bundled binary)
 
 %description
 AnimeVerse Enhanced brings anime discovery and streaming via Consumet integration.
@@ -57,9 +57,8 @@ Includes a Flask backend, modern UI, and HLS playback.
 rm -rf %{buildroot}
 # Install application into /opt/animeverse
 mkdir -p %{buildroot}/opt/animeverse
-cp -r backend %{buildroot}/opt/animeverse/backend
-cp -r src %{buildroot}/opt/animeverse/src
-cp -r assets %{buildroot}/opt/animeverse/assets || true
+mkdir -p %{buildroot}/opt/animeverse/bin
+install -m 0755 dist/animeverse %{buildroot}/opt/animeverse/bin/animeverse
 install -m 0755 launch.sh %{buildroot}/opt/animeverse/launch.sh
 
 # Desktop entry
@@ -78,6 +77,7 @@ chmod 0755 %{buildroot}/usr/bin/animeverse
 %license LICENSE
 %doc README.md
 /opt/animeverse
+/opt/animeverse/bin/animeverse
 /usr/bin/animeverse
 /usr/share/applications/animeverse.desktop
 

@@ -21,8 +21,12 @@ import threading
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Resolve static/template folder for both dev and PyInstaller bundles
+BASE_DIR = getattr(sys, '_MEIPASS', os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+STATIC_DIR = os.path.join(BASE_DIR, 'src')
+
 # Initialize Flask app
-app = Flask(__name__, static_folder='../src', template_folder='../src')
+app = Flask(__name__, static_folder=STATIC_DIR, template_folder=STATIC_DIR)
 
 # Enable CORS for all domains on all routes
 @app.after_request
